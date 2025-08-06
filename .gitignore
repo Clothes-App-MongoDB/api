@@ -1,0 +1,26 @@
+#  Không đẩy các module cài bằng npm
+node_modules/
+
+#  Không đẩy file cấu hình môi trường
+.env
+
+#  Không đẩy file log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+#  Không đẩy thư mục upload trong local (vì render dùng /tmp/uploads)
+uploads/
+
+#  Thư mục build tạm thời (nếu có)
+dist/
+build/
+
+#  Các hệ điều hành sinh ra
+.DS_Store
+Thumbs.db
+
+#  IDE/Editor (VSCode, JetBrains...) files
+.vscode/
+.idea/
+*.iml
