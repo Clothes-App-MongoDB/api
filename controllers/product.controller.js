@@ -2,6 +2,9 @@ const Product = require("../models/Product");
 const cloudinary = require("../utils/cloudinary");
 const path = require("path");
 const mongoose = require("mongoose");
+const jwt = require('jsonwebtoken');
+const wishlistService = require('../services/wishlist.service');
+const Comment = require('../models/Comment');
 
 
 // Kiểm tra có dùng Cloudinary không
@@ -21,27 +24,38 @@ function extractPublicId(url) {
   return `${folder}/${filename}`;
 }
 
-// Lấy tất cả sản phẩm
+// Lấy tất cả sản phẩm (kèm rating trung bình và số lượt đánh giá)
 exports.getAllProducts = async (req, res) => {
   try {
-    const filter = {};
+    const match = {};
 
-    // Lọc theo featured
     if (req.query.featured === 'true') {
-      filter.is_featured = true;
+      match.is_featured = true;
     }
 
-    // Lọc theo tên danh mục (category)
     if (req.query.category) {
-      filter.category = {
-        $regex: `^${req.query.category}$`,
-        $options: 'i' // Không phân biệt hoa thường
-      };
+      match.category = { $regex: `^${req.query.category}$`, $options: 'i' };
     }
 
-    const products = await Product.find(filter)
-      .collation({ locale: 'vi', strength: 1 }) // Hỗ trợ tiếng Việt
-      .sort({ createdAt: -1 });
+    const products = await Product.aggregate([
+      { $match: match },
+      {
+        $lookup: {
+          from: 'comments',
+          localField: '_id',
+          foreignField: 'product_id',
+          as: 'comments'
+        }
+      },
+      {
+        $addFields: {
+          ratingAvg: { $cond: [ { $gt: [ { $size: '$comments' }, 0 ] }, { $avg: '$comments.rating' }, null ] },
+          ratingCount: { $size: '$comments' }
+        }
+      },
+      { $project: { comments: 0 } },
+      { $sort: { createdAt: -1 } }
+    ]);
 
     res.json(products);
   } catch (err) {
@@ -52,12 +66,37 @@ exports.getAllProducts = async (req, res) => {
 
 
 
-// Lấy sản phẩm theo ID
+// Lấy sản phẩm theo ID (kèm isFavorite nếu truyền token hợp lệ)
 exports.getProductById = async (req, res) => {
   try {
     const product = await Product.findById(req.params.id);
     if (!product) return res.status(404).json({ message: "Không tìm thấy sản phẩm" });
-    res.json(product);
+
+    let isFavorite = false;
+    try {
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        const token = authHeader.split(' ')[1];
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        if (decoded?.userId) {
+          isFavorite = await wishlistService.isInWishlist(decoded.userId, product._id);
+        }
+      }
+    } catch (_) {
+      // Bỏ qua lỗi auth để API vẫn trả về chi tiết sản phẩm cho user chưa đăng nhập
+      isFavorite = false;
+    }
+
+    // Tính rating trung bình và số lượng
+    const summary = await Comment.aggregate([
+      { $match: { product_id: product._id } },
+      { $group: { _id: '$product_id', avg: { $avg: '$rating' }, count: { $sum: 1 } } }
+    ]);
+    const ratingAvg = summary[0]?.avg ?? null;
+    const ratingCount = summary[0]?.count ?? 0;
+
+    const productJson = product.toObject();
+    return res.json({ ...productJson, isFavorite, ratingAvg, ratingCount });
   } catch (err) {
     console.error("Lỗi khi lấy sản phẩm:", err);
     res.status(500).json({ message: "Lỗi server khi lấy sản phẩm" });
@@ -285,10 +324,30 @@ exports.getRelatedProductsByCategory = async (req, res) => {
   const { category, exclude } = req.query;
 
   try {
-    const products = await Product.find({
-      category,
-      _id: { $ne: exclude },
-    }).limit(8);
+    const match = { category };
+    if (exclude && mongoose.Types.ObjectId.isValid(exclude)) {
+      match._id = { $ne: new mongoose.Types.ObjectId(exclude) };
+    }
+
+    const products = await Product.aggregate([
+      { $match: match },
+      { $limit: 8 },
+      {
+        $lookup: {
+          from: 'comments',
+          localField: '_id',
+          foreignField: 'product_id',
+          as: 'comments'
+        }
+      },
+      {
+        $addFields: {
+          ratingAvg: { $cond: [ { $gt: [ { $size: '$comments' }, 0 ] }, { $avg: '$comments.rating' }, null ] },
+          ratingCount: { $size: '$comments' }
+        }
+      },
+      { $project: { comments: 0 } }
+    ]);
 
     res.json(products);
   } catch (error) {

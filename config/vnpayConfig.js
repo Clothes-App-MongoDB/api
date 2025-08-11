@@ -5,13 +5,13 @@ module.exports = {
   VNP_URL: process.env.VNP_URL || 'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html',
   
   // Return URL cho callback - phải là URL public mà VNPay có thể truy cập
-  VNP_RETURN_URL: process.env.VNP_RETURN_URL || 'https://0122f7433d0d.ngrok-free.app/api/payments/vnpay-return',
+  VNP_RETURN_URL: process.env.VNP_RETURN_URL || 'http://192.168.1.69:5000/api/payments/vnpay-return',
 
   // IPN URL cho server-to-server callback
-  VNP_IPN_URL: process.env.VNP_IPN_URL || 'https://0122f7433d0d.ngrok-free.app/api/payments/vnpay-ipn',
+  VNP_IPN_URL: process.env.VNP_IPN_URL || 'http://192.168.1.69:5000/api/payments/vnpay-ipn',
   
   // Callback URL cho xử lý callback (tương thích với backend api)
-  VNP_CALLBACK_URL: process.env.VNP_CALLBACK_URL || 'https://0122f7433d0d.ngrok-free.app/api/payments/handle-callback',
+  VNP_CALLBACK_URL: process.env.VNP_CALLBACK_URL || 'http://192.168.1.69:5000/api/payments/handle-callback',
   
   // Cấu hình cho development
   IS_SANDBOX: process.env.NODE_ENV !== 'production',
